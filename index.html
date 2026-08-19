@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="ショートゴルフ会" />
+<title>ショートゴルフ会｜リアルタイム集計</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f6f3ec;--card:#fff;--ink:#151515;--muted:#777;--line:#dfd9cc;--gold:#a98539;--gold2:#d4bd82;--green:#226d47;--red:#b93636}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(#faf9f6,#f3efe6);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+header{position:sticky;top:0;z-index:20;padding:14px 14px 12px;background:rgba(250,249,246,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;justify-content:space-between;gap:12px;align-items:center}.brand h1{font-size:20px;margin:0;font-weight:900}.brand small{color:var(--muted)}
+.live{background:#e8f5ec;color:var(--green);border-radius:999px;padding:6px 9px;font-size:11px;font-weight:900}.live.off{background:#f1eeee;color:#777}
+main{max-width:1050px;margin:auto;padding:12px 12px 100px}.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(0,0,0,.035)}
+h2{font-size:16px;margin:0 0 10px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}@media(max-width:680px){.grid2,.grid3{grid-template-columns:1fr}}
+label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px}input,select,button,textarea{font:inherit}input,select,textarea{width:100%;border:1px solid var(--line);border-radius:13px;padding:11px;background:white;font-size:16px}button{border:0;border-radius:13px;padding:11px 13px;font-weight:900;cursor:pointer}.primary{background:#111;color:white}.gold{background:linear-gradient(var(--gold2),var(--gold));color:white}.ghost{background:#f1ede5;color:#222}.danger{background:#fff2f2;color:var(--red);border:1px solid #edcccc}.small{font-size:12px;color:var(--muted);line-height:1.6}
+.score-grid{display:grid;grid-template-columns:repeat(9,minmax(58px,1fr));gap:6px;overflow:auto;padding-bottom:4px}.hole{min-width:58px}.hole b{display:block;text-align:center;font-size:11px;color:var(--muted);margin-bottom:3px}.hole input{text-align:center;padding:9px 4px}.hidden{background:#fff5d9!important;border-color:#d7bc69!important}
+.player-row{padding:11px 0;border-top:1px dashed var(--line)}.player-row:first-child{border-top:0}.name{font-weight:900}.meta{font-size:12px;color:var(--muted);margin-top:3px}.pill{display:inline-block;padding:5px 8px;border-radius:999px;background:#f2eee5;font-size:11px;font-weight:800;margin:2px 4px 2px 0}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:680px}th,td{padding:9px 7px;border-bottom:1px solid var(--line);font-size:13px;text-align:center}td.n{text-align:left;font-weight:800}.winner{font-size:30px;font-weight:900}.hero{background:radial-gradient(circle at top,#fff8dd,#fff);border:1px solid #dcc585;border-radius:22px;padding:18px;text-align:center}.hero .trophy{font-size:44px}.hero .label{font-size:11px;letter-spacing:.18em;color:#8b6b22;font-weight:900}.hero .sub{font-size:13px;color:#555}.links textarea{min-height:150px}.status{padding:10px;border-radius:12px;background:#f8f5ef;font-size:12px;color:#555}.hidden-ui{display:none!important}.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#111;color:white;padding:10px 14px;border-radius:999px;font-weight:800;font-size:12px;z-index:99;opacity:0;pointer-events:none;transition:.2s}.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header><div class="brand"><div><h1>ショートゴルフ会 ⛳️</h1><small id="modeLabel">リアルタイム集計</small></div><span id="liveBadge" class="live off">● 接続中</span></div></header>
+<main>
+<section id="startView" class="card">
+  <h2>🏆 新しい大会を作る</h2>
+  <div class="grid3">
+    <div><label>大会名</label><input id="newName" value="ショートゴルフ会"></div>
+    <div><label>開催日</label><input id="newDate" type="date"></div>
+    <div><label>ホール数</label><select id="newHoles"><option>9</option><option>18</option><option selected>27</option></select></div>
+  </div>
+  <div class="grid3" style="margin-top:9px">
+    <div><label>1組人数</label><select id="newGroup"><option>2</option><option>3</option><option selected>4</option></select></div>
+    <div><label>隠しホール数</label><input id="newHidden" type="number" value="12"></div>
+    <div><label>HDCP上限</label><input id="newCap" type="number" value="36"></div>
+  </div>
+  <button id="createTournament" class="gold" style="width:100%;margin-top:12px">大会を作成する</button>
+  <p class="small">大会を作ると、この端末が管理者になります。参加者には専用URLを送ります。</p>
+</section>
+
+<div id="adminView" class="hidden-ui">
+  <section class="card">
+    <h2>大会設定</h2>
+    <div class="grid3"><div><label>大会名</label><input id="eventName"></div><div><label>開催日</label><input id="eventDate" type="date"></div><div><label>ホール数</label><select id="holeCount"><option>9</option><option>18</option><option>27</option></select></div></div>
+    <div class="grid3" style="margin-top:9px"><div><label>1組人数</label><select id="groupSize"><option>2</option><option>3</option><option>4</option></select></div><div><label>隠しホール数</label><input id="hiddenCount" type="number"></div><div><label>HDCP上限</label><input id="hcpCap" type="number"></div></div>
+    <div class="row" style="margin-top:10px"><button id="randomHidden" class="ghost">隠しホールを抽選</button><button id="saveTournament" class="primary">大会設定を保存</button></div>
+    <div id="hiddenLabel" class="small" style="margin-top:9px"></div>
+  </section>
+
+  <section class="card"><h2>参加者登録</h2><div class="row"><div class="grow"><input id="playerName" placeholder="参加者名"></div><button id="addPlayer" class="primary">＋追加</button></div><div id="playerList" style="margin-top:8px"></div></section>
+
+  <section class="card links"><h2>📲 参加者に送るURL</h2><textarea id="shareLinks" readonly></textarea><div class="row" style="margin-top:8px"><button id="copyLinks" class="gold">全部コピー</button><button id="shareLinksBtn" class="ghost">共有する</button></div><p class="small">各参加者には「自分の名前のURL」だけ送ればOK。開くと本人の入力画面になります。</p></section>
+
+  <section class="card"><h2>リアルタイム進行</h2><div id="progress"></div></section>
+  <section class="card"><div class="hero"><div class="label">WINNER</div><div class="trophy">🏆</div><div id="winnerName" class="winner">集計待ち</div><div id="winnerMeta" class="sub">全員の入力が終わると自動計算されます</div></div></section>
+  <section class="card"><h2>順位表</h2><div class="table-wrap"><table><thead><tr><th>順位</th><th>名前</th><th>組</th><th>GROSS</th><th>HDCP</th><th>NET</th><th>進行</th></tr></thead><tbody id="ranking"></tbody></table></div></section>
+</div>
+
+<div id="playerView" class="hidden-ui">
+  <section class="card"><h2 id="playerTitle">スコア入力</h2><div id="playerInfo" class="status"></div><div id="scoreGrid" class="score-grid" style="margin-top:12px"></div><p class="small">入力した瞬間に保存され、管理者画面へリアルタイム反映されます。</p></section>
+  <section class="card"><h2>現在のスコア</h2><div id="mySummary" class="hero"></div></section>
+</div>
+
+<section id="errorView" class="card hidden-ui"><h2>接続できませんでした</h2><div id="errorText" class="small"></div></section>
+</main>
+<div id="toast" class="toast">保存しました</div>
+<script>
+const SUPABASE_URL='https://rqwionutgnlwbbhmolzo.supabase.co';
+const SUPABASE_KEY='sb_publishable_-Wc4tz1io6Ec3Y5ySu3FhA_fcw3D06X';
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{realtime:{params:{eventsPerSecond:10}}});
+const $=id=>document.getElementById(id);
+let tournament=null, players=[], scores=[], adminToken='', playerToken='', currentPlayer=null, channel=null;
+const params=new URLSearchParams(location.search);
+function toast(t){const x=$('toast');x.textContent=t;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),1200)}
+function today(){return new Date().toISOString().slice(0,10)}
+function baseUrl(){return location.origin+location.pathname}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function showError(e){$('startView').classList.add('hidden-ui');$('adminView').classList.add('hidden-ui');$('playerView').classList.add('hidden-ui');$('errorView').classList.remove('hidden-ui');$('errorText').textContent=e?.message||String(e);$('liveBadge').textContent='● エラー';$('liveBadge').classList.add('off')}
+function setLive(ok){$('liveBadge').textContent=ok?'● LIVE':'● 接続中';$('liveBadge').classList.toggle('off',!ok)}
+async function createTournament(){
+ const {data,error}=await db.rpc('create_golf_tournament',{p_name:$('newName').value,p_event_date:$('newDate').value,p_hole_count:+$('newHoles').value,p_group_size:+$('newGroup').value,p_hidden_count:+$('newHidden').value,p_hcp_cap:+$('newCap').value});
+ if(error) return showError(error); const r=data[0]; localStorage.setItem('golf_admin_'+r.tournament_id,r.admin_token); location.href=baseUrl()+'?admin='+r.tournament_id+'.'+r.admin_token;
+}
+async function loadTournament(id){const {data,error}=await db.from('tournaments').select('*').eq('id',id).single();if(error)throw error;tournament=data}
+async function loadPlayers(){const {data,error}=await db.from('players').select('*').eq('tournament_id',tournament.id).order('sort_order');if(error)throw error;players=data||[]}
+async function loadScores(){const {data,error}=await db.from('scores').select('*').eq('tournament_id',tournament.id);if(error)throw error;scores=data||[]}
+function scoreOf(pid,h){return scores.find(s=>s.player_id===pid&&s.hole_no===h)?.strokes??''}
+function pars(){const p=Array.isArray(tournament.pars)?tournament.pars:[];return Array.from({length:tournament.hole_count},(_,i)=>+(p[i]??3))}
+function results(){const ps=pars(),totalPar=ps.reduce((a,b)=>a+b,0), hidden=tournament.hidden_holes||[];return players.map(p=>{const ss=Array.from({length:tournament.hole_count},(_,i)=>scoreOf(p.id,i+1));const complete=ss.every(v=>v!==''&&v!=null);const gross=ss.reduce((a,b)=>a+(+b||0),0);const hs=hidden.reduce((a,h)=>a+(+scoreOf(p.id,h)||0),0);const hp=hidden.reduce((a,h)=>a+(ps[h-1]||3),0);let hcp=hp?(((hs/hp)*totalPar)-totalPar)*.8:0;hcp=Math.max(0,Math.min(+tournament.hcp_cap||36,Math.round(hcp*10)/10));const net=Math.round((gross-hcp)*10)/10;const done=ss.filter(v=>v!==''&&v!=null).length;return{p,gross,hcp,net,complete,done}}).sort((a,b)=>(b.complete-a.complete)||a.net-b.net||a.gross-b.gross||a.p.name.localeCompare(b.p.name,'ja'))}
+function renderAdmin(){
+ $('eventName').value=tournament.name;$('eventDate').value=tournament.event_date||'';$('holeCount').value=tournament.hole_count;$('groupSize').value=tournament.group_size;$('hiddenCount').value=tournament.hidden_count;$('hcpCap').value=tournament.hcp_cap;
+ $('hiddenLabel').textContent='隠しホール：'+((tournament.hidden_holes||[]).map(x=>x+'H').join('・')||'未抽選');
+ $('playerList').innerHTML=players.length?players.map((p,i)=>`<div class="player-row"><div class="row"><div class="grow"><div class="name">${esc(p.name)}</div><div class="meta">${p.group_no||'-'}組 / ${scores.filter(s=>s.player_id===p.id).length}/${tournament.hole_count}H</div></div><button class="danger" data-del="${p.id}">削除</button></div></div>`).join(''):'<div class="small">参加者を追加してください。</div>';
+ document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deletePlayer(b.dataset.del));
+ const stored=JSON.parse(localStorage.getItem('golf_player_links_'+tournament.id)||'{}');
+ $('shareLinks').value=players.map(p=>stored[p.id]?`${p.name}\n${baseUrl()}?play=${p.id}.${stored[p.id]}`:`${p.name}\n（URL再発行が必要）`).join('\n\n');
+ const rr=results();$('progress').innerHTML=players.length?rr.map(r=>`<div class="player-row"><div class="row"><div class="grow"><div class="name">${esc(r.p.name)}</div><div class="meta">${r.p.group_no||'-'}組</div></div><span class="pill">${r.done}/${tournament.hole_count}H</span><span class="pill">GROSS ${r.gross}</span></div></div>`).join(''):'<div class="small">参加者なし</div>';
+ $('ranking').innerHTML=rr.map((r,i)=>`<tr><td>${r.complete?(i===0?'🏆':i+1):'-'}</td><td class="n">${esc(r.p.name)}</td><td>${r.p.group_no||'-'}</td><td>${r.gross}</td><td>${r.hcp.toFixed(1)}</td><td><b>${r.net.toFixed(1)}</b></td><td>${r.done}/${tournament.hole_count}</td></tr>`).join('');
+ const done=rr.filter(r=>r.complete);$('winnerName').textContent=done[0]?.p.name||'集計待ち';$('winnerMeta').textContent=done[0]?`GROSS ${done[0].gross} / HDCP ${done[0].hcp.toFixed(1)} / NET ${done[0].net.toFixed(1)}`:'全員の入力が終わると自動計算されます';
+}
+async function saveTournament(){
+ const hc=+$('holeCount').value;let p=pars();p=Array.from({length:hc},(_,i)=>p[i]??3);let hh=(tournament.hidden_holes||[]).filter(x=>x<=hc).slice(0,+$('hiddenCount').value);
+ const {error}=await db.rpc('admin_update_tournament',{p_tournament_id:tournament.id,p_admin_token:adminToken,p_name:$('eventName').value,p_event_date:$('eventDate').value,p_hole_count:hc,p_group_size:+$('groupSize').value,p_hidden_count:+$('hiddenCount').value,p_hcp_cap:+$('hcpCap').value,p_pars:p,p_hidden_holes:hh});if(error)return showError(error);await refresh();toast('大会設定を保存')}
+async function randomHidden(){const n=Math.min(+$('hiddenCount').value,+$('holeCount').value),a=Array.from({length:+$('holeCount').value},(_,i)=>i+1);for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}tournament.hidden_holes=a.slice(0,n).sort((x,y)=>x-y);await saveTournament()}
+async function addPlayer(){const name=$('playerName').value.trim();if(!name)return;const no=Math.floor(players.length/(+tournament.group_size||4))+1;const {data,error}=await db.rpc('admin_add_player',{p_tournament_id:tournament.id,p_admin_token:adminToken,p_name:name,p_group_no:no,p_sort_order:players.length});if(error)return showError(error);const r=data[0],stored=JSON.parse(localStorage.getItem('golf_player_links_'+tournament.id)||'{}');stored[r.player_id]=r.edit_token;localStorage.setItem('golf_player_links_'+tournament.id,JSON.stringify(stored));$('playerName').value='';await refresh();toast('参加者を追加')}
+async function deletePlayer(id){if(!confirm('この参加者を削除しますか？'))return;const {error}=await db.rpc('admin_delete_player',{p_tournament_id:tournament.id,p_admin_token:adminToken,p_player_id:id});if(error)return showError(error);const stored=JSON.parse(localStorage.getItem('golf_player_links_'+tournament.id)||'{}');delete stored[id];localStorage.setItem('golf_player_links_'+tournament.id,JSON.stringify(stored));await refresh()}
+async function renderPlayer(){
+ $('playerTitle').textContent=currentPlayer.name+' さんのスコア入力';$('playerInfo').textContent=`${tournament.name}｜${currentPlayer.group_no||'-'}組｜${tournament.hole_count}H`;
+ $('scoreGrid').innerHTML=Array.from({length:tournament.hole_count},(_,i)=>`<div class="hole"><b>${i+1}H ${(tournament.hidden_holes||[]).includes(i+1)?'★':''}</b><input class="${(tournament.hidden_holes||[]).includes(i+1)?'hidden':''}" type="number" inputmode="numeric" min="1" max="20" data-hole="${i+1}" value="${scoreOf(currentPlayer.id,i+1)}"></div>`).join('');
+ document.querySelectorAll('[data-hole]').forEach(x=>x.onchange=async()=>{if(!x.value)return;const {error}=await db.rpc('player_set_score',{p_player_id:currentPlayer.id,p_edit_token:playerToken,p_hole_no:+x.dataset.hole,p_strokes:+x.value});if(error)return showError(error);toast(`${x.dataset.hole}H 保存`)});
+ const r=results().find(x=>x.p.id===currentPlayer.id);$('mySummary').innerHTML=`<div class="label">MY SCORE</div><div class="winner">${r.gross}</div><div class="sub">入力 ${r.done}/${tournament.hole_count}H${r.complete?` / 暫定NET ${r.net.toFixed(1)}`:''}</div>`;
+}
+async function refresh(){await Promise.all([loadTournament(tournament.id),loadPlayers(),loadScores()]);if(currentPlayer)currentPlayer=players.find(p=>p.id===currentPlayer.id)||currentPlayer;adminToken?renderAdmin():renderPlayer()}
+function subscribe(){if(channel)db.removeChannel(channel);channel=db.channel('golf-'+tournament.id).on('postgres_changes',{event:'*',schema:'public',table:'scores',filter:`tournament_id=eq.${tournament.id}`},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'players',filter:`tournament_id=eq.${tournament.id}`},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'tournaments',filter:`id=eq.${tournament.id}`},()=>refresh()).subscribe(s=>setLive(s==='SUBSCRIBED'))}
+async function copyText(t){try{await navigator.clipboard.writeText(t);toast('コピーしました')}catch{prompt('コピーしてください',t)}}
+async function init(){
+ $('newDate').value=today();$('createTournament').onclick=createTournament;
+ const a=params.get('admin'),p=params.get('play');
+ try{
+  if(a){const [id,token]=a.split('.');adminToken=token||localStorage.getItem('golf_admin_'+id)||'';if(!adminToken)throw new Error('管理者キーがありません');await loadTournament(id);await Promise.all([loadPlayers(),loadScores()]);$('startView').classList.add('hidden-ui');$('adminView').classList.remove('hidden-ui');$('modeLabel').textContent='管理者・リアルタイム集計';$('saveTournament').onclick=saveTournament;$('randomHidden').onclick=randomHidden;$('addPlayer').onclick=addPlayer;$('playerName').onkeydown=e=>{if(e.key==='Enter')addPlayer()};$('copyLinks').onclick=()=>copyText($('shareLinks').value);$('shareLinksBtn').onclick=async()=>navigator.share?navigator.share({title:tournament.name,text:$('shareLinks').value}):copyText($('shareLinks').value);renderAdmin();subscribe();return}
+  if(p){const [pid,token]=p.split('.');playerToken=token;if(!playerToken)throw new Error('参加者キーがありません');const {data:pl,error}=await db.from('players').select('*').eq('id',pid).single();if(error)throw error;currentPlayer=pl;await loadTournament(pl.tournament_id);await Promise.all([loadPlayers(),loadScores()]);$('startView').classList.add('hidden-ui');$('playerView').classList.remove('hidden-ui');$('modeLabel').textContent='参加者スコア入力';renderPlayer();subscribe();return}
+  setLive(true);
+ }catch(e){showError(e)}
+}
+init();
+</script>
+</body></html>
