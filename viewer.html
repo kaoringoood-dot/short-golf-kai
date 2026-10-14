@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ショートゴルフ会｜閲覧専用</title>
+<style>
+:root{--bg:#f6f3ec;--card:#fff;--ink:#151515;--muted:#777;--line:#dfd9cc;--gold:#a98539;--green:#226d47}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(#faf9f6,#f3efe6);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+header{position:sticky;top:0;z-index:20;padding:14px;background:rgba(250,249,246,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand h1{font-size:20px;margin:0;font-weight:900}.brand small{color:var(--muted)}
+.live{background:#e8f5ec;color:var(--green);border-radius:999px;padding:6px 9px;font-size:11px;font-weight:900}
+main{max-width:900px;margin:auto;padding:12px 12px 100px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(0,0,0,.035)}
+h2{font-size:16px;margin:0 0 10px}
+.player-row{padding:11px 0;border-top:1px dashed var(--line)}.player-row:first-child{border-top:0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1}
+.name{font-weight:900}.meta{font-size:12px;color:var(--muted);margin-top:3px}
+.pill{display:inline-block;padding:5px 8px;border-radius:999px;background:#f2eee5;font-size:11px;font-weight:800}
+.hero{background:radial-gradient(circle at top,#fff8dd,#fff);border:1px solid #dcc585;border-radius:22px;padding:18px;text-align:center}
+.hero .trophy{font-size:44px}.hero .label{font-size:11px;letter-spacing:.18em;color:#8b6b22;font-weight:900}
+.winner{font-size:30px;font-weight:900}.sub{font-size:13px;color:#555}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:680px}
+th,td{padding:9px 7px;border-bottom:1px solid var(--line);font-size:13px;text-align:center}
+td.n{text-align:left;font-weight:800}.notice{font-size:12px;color:var(--muted);line-height:1.6}
+</style>
+</head>
+<body>
+<header><div class="brand"><div><h1>ショートゴルフ会 ⛳️</h1><small>閲覧専用・リアルタイム</small></div><span class="live">● LIVE</span></div></header>
+<main>
+<section class="card"><div class="notice">👀 見るだけ専用画面です。参加者追加・削除・大会設定変更・スコア編集はできません。</div></section>
+<section class="card"><h2>リアルタイム進行</h2><div id="progress">読み込み中...</div></section>
+<section class="card"><div class="hero"><div class="label">WINNER</div><div class="trophy">🏆</div><div id="winner" class="winner">集計待ち</div><div id="winnerMeta" class="sub">入力状況をリアルタイム表示します</div></div></section>
+<section class="card"><h2>順位表</h2><div class="table-wrap"><table><thead><tr><th>順位</th><th>名前</th><th>組</th><th>GROSS</th><th>HDCP</th><th>NET</th><th>進行</th></tr></thead><tbody id="ranking"></tbody></table></div></section>
+</main>
+<script>
+const SUPABASE_URL='https://rqwionutgnlwbbhmolzo.supabase.co';
+const SUPABASE_KEY='sb_publishable_-Wc4tz1io6Ec3Y5ySu3FhA_fcw3D06X';
+const params=new URLSearchParams(location.search);
+const TOURNAMENT_ID=params.get('view');
+let tournament=null,players=[],scores=[];
+const headers={apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY};
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function scoreOf(pid,h){return scores.find(s=>s.player_id===pid&&s.hole_no===h)?.strokes??''}
+function pars(){const p=Array.isArray(tournament?.pars)?tournament.pars:[];return Array.from({length:tournament.hole_count},(_,i)=>+(p[i]??3))}
+function results(){
+ const ps=pars(),totalPar=ps.reduce((a,b)=>a+b,0),hidden=tournament.hidden_holes||[];
+ return players.map(p=>{
+  const ss=Array.from({length:tournament.hole_count},(_,i)=>scoreOf(p.id,i+1));
+  const complete=ss.every(v=>v!==''&&v!=null);
+  const gross=ss.reduce((a,b)=>a+(+b||0),0);
+  const hs=hidden.reduce((a,h)=>a+(+scoreOf(p.id,h)||0),0);
+  const hp=hidden.reduce((a,h)=>a+(ps[h-1]||3),0);
+  let hcp=hp?(((hs/hp)*totalPar)-totalPar)*.8:0;
+  hcp=Math.max(0,Math.min(+tournament.hcp_cap||36,Math.round(hcp*10)/10));
+  const net=Math.round((gross-hcp)*10)/10;
+  const done=ss.filter(v=>v!==''&&v!=null).length;
+  return{p,gross,hcp,net,complete,done}
+ }).sort((a,b)=>(b.complete-a.complete)||a.net-b.net||a.gross-b.gross||a.p.name.localeCompare(b.p.name,'ja'))
+}
+async function api(path){
+ const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,{headers});
+ if(!r.ok) throw new Error(await r.text());
+ return await r.json();
+}
+async function load(){
+ if(!TOURNAMENT_ID){document.getElementById('progress').textContent='大会IDがありません';return}
+ try{
+  const [t,p,s]=await Promise.all([
+   api('tournaments?id=eq.'+TOURNAMENT_ID+'&select=*'),
+   api('players?tournament_id=eq.'+TOURNAMENT_ID+'&select=*&order=sort_order.asc'),
+   api('scores?tournament_id=eq.'+TOURNAMENT_ID+'&select=*')
+  ]);
+  tournament=t[0];players=p||[];scores=s||[];render();
+ }catch(e){
+  document.getElementById('progress').textContent='読み込みエラー';
+ }
+}
+function render(){
+ const rr=results();
+ document.getElementById('progress').innerHTML=players.length?rr.map(r=>`<div class="player-row"><div class="row"><div class="grow"><div class="name">${esc(r.p.name)}</div><div class="meta">${r.p.group_no||'-'}組</div></div><span class="pill">${r.done}/${tournament.hole_count}H</span><span class="pill">GROSS ${r.gross}</span></div></div>`).join(''):'参加者なし';
+ document.getElementById('ranking').innerHTML=rr.map((r,i)=>`<tr><td>${r.complete?(i===0?'🏆':i+1):'-'}</td><td class="n">${esc(r.p.name)}</td><td>${r.p.group_no||'-'}</td><td>${r.gross}</td><td>${r.hcp.toFixed(1)}</td><td><b>${r.net.toFixed(1)}</b></td><td>${r.done}/${tournament.hole_count}</td></tr>`).join('');
+ const done=rr.filter(r=>r.complete);
+ document.getElementById('winner').textContent=done[0]?.p.name||'集計待ち';
+ document.getElementById('winnerMeta').textContent=done[0]?`GROSS ${done[0].gross} / HDCP ${done[0].hcp.toFixed(1)} / NET ${done[0].net.toFixed(1)}`:'入力状況をリアルタイム表示します';
+}
+load();
+setInterval(load,5000);
+</script>
+</body>
+</html>
